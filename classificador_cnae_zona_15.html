@@ -323,7 +323,7 @@
             
             data.forEach(item => {
                 const row = document.createElement('tr');
-                const cnae = getValueFromItem(row, ['cnae', 'CNAE']);
+                const cnae = getValueFromItem(item, ['cnae', 'CNAE']);
                 const descricao = getValueFromItem(item, ['descricao', 'Descricao', 'DESCRIÇÃO', 'Descrição']);
                 const categoriaCompleta = getValueFromItem(item, ['categoria', 'Categoria', 'CATEGORIA', 'Categoría']);
                 const justificativa = getValueFromItem(item, ['justificativa', 'Justificativa', 'Justificativa com Base Lei 4186.2007']);
