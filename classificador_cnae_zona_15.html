@@ -475,7 +475,6 @@
                     inscricaoZoneMap.get(inscricao).add(zona);
                 }
 
-                // CORREÇÃO: A variável 'item' foi trocada por 'row'
                 const cnae = getValueFromItem(row, ['cnae', 'CNAE']);
                 if (cnae && !uniqueCnaes.has(cnae)) {
                    uniqueCnaes.set(cnae, row);
@@ -483,7 +482,8 @@
             });
 
             cnaeData = Array.from(uniqueCnaes.values());
-            renderTable([], cnaeData.length);
+            // CORREÇÃO LÓGICA: Chama masterFilter() para renderizar a tabela com todos os dados carregados
+            masterFilter();
         }
 
         // Lida com o carregamento do ficheiro CSV
