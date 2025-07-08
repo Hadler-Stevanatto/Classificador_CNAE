@@ -1,1 +1,592 @@
 # Classificador_CNAE_4186/2007
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classificador de CNAE - Zoneamento de Valinhos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- PapaParse para análise de CSV -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .search-input:disabled {
+            background-color: #f3f4f6;
+            cursor: not-allowed;
+        }
+        /* Estilo para as tags de pesquisa */
+        .cnae-tag {
+            display: inline-flex;
+            align-items: center;
+            background-color: #e0e7ff; /* indigo-200 */
+            color: #3730a3; /* indigo-800 */
+            border-radius: 9999px; /* rounded-full */
+            padding: 0.25rem 0.75rem; /* py-1 px-3 */
+            margin: 0.125rem; /* m-0.5 */
+            font-size: 0.875rem; /* text-sm */
+            font-weight: 500; /* font-medium */
+            white-space: nowrap;
+        }
+        /* Estilo para o botão 'x' na tag */
+        .cnae-tag-close {
+            margin-left: 0.5rem; /* ml-2 */
+            cursor: pointer;
+            width: 1rem;
+            height: 1rem;
+        }
+        .cnae-tag-close:hover {
+            color: #c7d2fe; /* indigo-300 */
+        }
+        /* Garante que o campo de input dentro do container de tags não tenha borda */
+        #tag-container input {
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
+            padding-left: 0.25rem;
+        }
+
+        /* Estilos específicos para impressão */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #printable-area, #printable-area * {
+                visibility: visible;
+            }
+            #printable-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+            .no-print {
+                display: none !important;
+            }
+            #print-summary {
+                display: block !important;
+                margin-bottom: 1.5rem;
+                border-bottom: 2px solid #ccc;
+                padding-bottom: 1rem;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            th, td {
+                border: 1px solid #ddd;
+                padding: 8px;
+                color: #000 !important;
+            }
+            thead {
+                background-color: #eee !important;
+            }
+            tr {
+                background-color: #fff !important;
+            }
+            .cnae-tag, .bg-red-50, .hover\:bg-gray-50 {
+                background-color: transparent !important;
+                color: #000 !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 sm:p-6 md:p-8">
+        <header class="text-center mb-8 no-print">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Classificador de CNAE Dinâmico</h1>
+            <p class="text-md text-gray-600 mt-2">Baseado no Anexo II da Lei de Zoneamento de Valinhos (Lei 4186/2007)</p>
+        </header>
+
+        <main>
+            <!-- Secção de Carregamento de Ficheiro -->
+            <div class="mb-6 p-4 rounded-lg border border-indigo-200 bg-indigo-50 shadow-sm no-print">
+                <h2 class="text-lg font-semibold text-indigo-800 mb-2">Carregar a sua Planilha</h2>
+                                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div class="md:col-span-2">
+                        <label for="csvFile" class="block text-xs font-medium text-gray-700 mb-1">Ficheiro CSV (com CNAEs e Inscrições):</label>
+                        <input type="file" id="csvFile" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 cursor-pointer"/>
+                    </div>
+                    <div>
+                        <label for="encoding" class="block text-xs font-medium text-gray-700 mb-1">Codificação:</label>
+                        <select id="encoding" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="UTF-8">UTF-8 (Padrão)</option>
+                            <option value="ISO-8859-1">ISO-8859-1 (Latin1)</option>
+                            <option value="windows-1252">Windows-1252</option>
+                        </select>
+                    </div>
+                </div>
+                 <p class="text-xs text-indigo-700 mt-2">Dica: Se vir caracteres estranhos (ex: �), tente a opção `ISO-8859-1 (Latin1)`.</p>
+
+                <div id="file-feedback" class="mt-3">
+                    <p id="file-status" class="text-xs text-indigo-600">Nenhum ficheiro carregado. A busca está desativada.</p>
+                    <div id="detected-headers" class="text-xs text-gray-500 mt-1"></div>
+                </div>
+            </div>
+
+            <div id="printable-area">
+                <!-- Secção de Resumo para Impressão (oculta no ecrã) -->
+                <div id="print-summary" class="hidden"></div>
+
+                <!-- Secção de Pesquisa -->
+                <div class="p-4 rounded-lg border border-gray-200 shadow-sm sticky top-4 bg-gray-50/80 backdrop-blur-sm z-10 mb-6 no-print">
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
+                        <!-- Pesquisa por Inscrição -->
+                        <div class="md:col-span-2">
+                            <label for="inscricao-search" class="block text-sm font-medium text-gray-700 mb-2">1. Buscar por Inscrição (Prioridade)</label>
+                            <div class="relative">
+                                <input type="text" id="inscricao-search" placeholder="Digite uma inscrição..." class="w-full px-4 py-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out search-input" disabled>
+                                 <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                    <svg class="h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" /></svg>
+                                </div>
+                            </div>
+                             <p id="inscricao-feedback" class="text-xs mt-1 h-4"></p>
+                        </div>
+
+                        <!-- Pesquisa por Zona -->
+                        <div>
+                            <label for="zone-search" class="block text-sm font-medium text-gray-700 mb-2">2. Ou Buscar por Zona</label>
+                            <div class="flex items-center space-x-3">
+                                 <select id="zone-search" class="flex-grow min-w-0 px-3 py-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 search-input" disabled>
+                                    <option value="">Todas as Zonas</option>
+                                 </select>
+                                 <div id="zone-counter-wrapper" class="w-28 text-center hidden">
+                                     <span id="zone-items-count" class="text-sm text-gray-700"></span>
+                                 </div>
+                            </div>
+                            <p id="zone-composition-feedback" class="text-xs text-gray-600 mt-1 h-auto"></p>
+                        </div>
+
+                         <!-- Pesquisa por Texto / Tags -->
+                        <div>
+                            <label for="search" class="block text-sm font-medium text-gray-700 mb-2">3. Refinar por CNAE ou palavra-chave</label>
+                            <div id="tag-container" class="w-full flex items-center flex-wrap px-2 border border-gray-300 rounded-md shadow-sm bg-white focus-within:ring-1 focus-within:ring-indigo-500 focus-within:border-indigo-500">
+                                 <input type="text" id="search" placeholder="Digite CNAEs ou palavras..." class="flex-grow py-3 search-input" disabled>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cabeçalho dos Resultados -->
+                <div class="flex justify-between items-baseline mb-3 px-1">
+                    <h3 class="text-lg font-semibold text-gray-800">Resultados da Classificação</h3>
+                    <div class="flex items-center space-x-4">
+                        <span id="results-count" class="text-sm font-medium text-gray-500"></span>
+                        <button id="print-button" class="no-print bg-indigo-600 text-white px-4 py-2 rounded-md shadow-sm hover:bg-indigo-700 disabled:bg-gray-400" disabled>Imprimir</button>
+                    </div>
+                </div>
+
+                <!-- Tabela de Resultados -->
+                <div class="bg-white shadow-md rounded-lg overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CNAE</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Justificativa</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Zonas Possíveis</th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-table" class="bg-white divide-y divide-gray-200">
+                               <!-- As linhas serão inseridas aqui pelo JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                     <div id="no-results" class="text-center p-8 text-gray-500">
+                        <p>Nenhum dado para exibir. Carregue um ficheiro CSV para começar.</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="text-center mt-12 text-sm text-gray-500 no-print">
+            <p>&copy; 2025 Classificador de CNAE. Todos os direitos reservados. Prefeitura Municipal de Valinhos.</p>
+        </footer>
+    </div>
+
+    <script>
+        // Armazenamento de dados globais
+        let cnaeData = [];
+        let activitiesInZone = {};
+        let categoryToZoneMapping = {};
+        let inscricaoZoneMap = new Map();
+        let searchTags = []; 
+
+        // Mapeamento para descrições de zona
+        const zoneDescriptions = {
+            '1A3': 'Zona Comercial Central', '1AX': 'Zona Comercial Geral', '2A2': 'Zona Mista I', '2AX': 'Zona Mista II', '2B2': 'Zona Mista III', '3A2': 'Zona de Predominância Residencial I', '3B2': 'Zona de Predominância Residencial II', '3BX': 'Zona de Predominância Residencial III', '3C2': 'Zona de Predominância Residencial IV', '3D2': 'Zona de Predominância Residencial V', '3E2': 'Zona de Predominância Residencial VI', '3F2': 'Zona de Predominância Residencial VII', '4A2': 'Zona de Predominância Industrial I', '4B2': 'Zona de Predominância Industrial II', '4C2': 'Zona de Predominância Industrial III', '5BX': 'Zona de Predominância Turismo/ Residencial I', '5BX*': 'Zona de Predominância Turismo/ Residencial II', '6C2': 'Zona Rural Agrícola', '7GX': 'Zona de Predominância Institucional/Turismo', 'ZEISA': 'Zona Especial de Interesse Socio Ambiental', '4H2': 'Zona de Predominancia Logistica', 'MRTPRM': 'Macrozona Rural Turistica de Preservação e Recuperação de Mananciais', 'CORREDOR_1': 'Corredor Nivel 1', 'CORREDOR_2': 'Corredor Nivel 2', 'CORREDOR_3': 'Corredor Nivel 3', 'CORREDOR_4': 'Corredor Nivel 4'
+        };
+
+        // Fonte de dados centralizada para todas as definições de zona
+        const zoneToCategoryMapping = {
+            '1A3': ['II.A', 'II.B.2', 'II.B.3', 'II.C', 'II.D.1', 'III.A.1', 'III.B.1', 'III.C'], '1AX': ['II.A', 'II.B.2', 'II.B.3', 'II.C', 'II.D.1', 'III.A.1', 'III.B.1', 'III.C'], '2A2': ['II.A', 'II.B.2', 'II.B.3', 'II.C', 'II.D.1'], '2AX': ['II.A', 'II.B.2', 'II.B.3', 'II.C', 'II.D.1'], '2B2': ['II.B.3'], '3A2': ['II.B.1'], '3B2': ['II.B.1'], '3BX': ['II.B.1'], '3C2': ['II.B.1'], '3D2': ['II.B.3'], '3E2': ['II.B.3'], '3F2': ['II.B.3'], '4A2': ['II.A', 'II.B.2', 'II.B.3', 'II.C', 'II.D.1', 'II.D.2', 'III.A.1', 'III.A.2', 'III.B.1', 'III.B.2', 'III.C', 'III.D', 'IV.A', 'IV.B.1', 'IV.C', 'IV.D'], '4B2': ['II.A', 'II.B.2', 'II.B.3', 'II.C', 'II.D.1', 'II.D.2', 'III.A.1', 'III.A.2', 'III.B.1', 'III.B.2', 'III.C', 'III.D', 'IV.A', 'IV.B.1', 'IV.C', 'IV.D'], '4C2': ['II.A', 'II.B.2', 'II.B.3', 'II.C', 'II.D.1', 'II.D.2', 'III.A.1', 'III.A.2', 'III.B.1', 'III.B.2', 'III.C', 'III.D', 'IV.A', 'IV.B.1', 'IV.B.2', 'IV.C', 'IV.D', 'V.A', 'V.B'], '5BX': ['II.A', 'II.B.2', 'II.B.3', 'II.C', 'II.D.1', 'II.D.2', 'III.C', 'IV.C'], '5BX*': ['II.A', 'II.B.2', 'II.C', 'III.B.1', 'III.B.2', 'III.C'], '6C2': ['II.A', 'II.B.3', 'II.C', 'II.D.2'], '7GX': ['II.B.3', 'II.C', 'III.C', 'IV.C'], 'ZEISA': ['II.A', 'II.B.2', 'II.B.3', 'II.C', 'II.D.1'], '4H2': ['II.A', 'II.B.2', 'II.B.3', 'II.C', 'III.A.1', 'III.B.1', 'III.B.2', 'III.C', 'IV.A', 'IV.B.2', 'IV.C'], 'MRTPRM': ['II.B.1', 'II.B.2', 'II.B.3', 'II.D.2'], 'CORREDOR_1': ['II.A', 'II.B.2', 'II.B.3', 'II.C', 'II.D.1', 'II.D.2'], 'CORREDOR_2': ['II.A', 'II.B.2', 'II.B.3', 'II.C', 'II.D.1', 'II.D.2', 'III.A.1', 'III.A.2', 'III.B.1', 'III.B.2', 'III.C', 'III.D'], 'CORREDOR_3': ['II.A', 'II.B.2', 'II.B.3', 'II.C', 'II.D.1', 'II.D.2', 'III.A.1', 'III.A.2', 'III.B.1', 'III.B.2', 'III.C', 'III.D', 'IV.A', 'IV.B.1', 'IV.C', 'IV.D'], 'CORREDOR_4': ['II.A', 'II.B.2', 'II.B.3', 'II.C', 'II.D.1', 'II.D.2', 'III.A.1', 'III.A.2', 'III.B.1', 'III.B.2', 'III.C', 'III.D', 'IV.A', 'IV.B.1', 'IV.B.2', 'IV.C', 'IV.D', 'V.A', 'V.B']
+        };
+
+        // Seletores de elementos do DOM
+        const searchInput = document.getElementById('search');
+        const tagContainer = document.getElementById('tag-container');
+        const zoneSearchSelect = document.getElementById('zone-search');
+        const zoneCompositionFeedback = document.getElementById('zone-composition-feedback');
+        const inscricaoSearchInput = document.getElementById('inscricao-search');
+        const inscricaoFeedback = document.getElementById('inscricao-feedback');
+        const resultsTable = document.getElementById('results-table');
+        const noResults = document.getElementById('no-results');
+        const csvFileInput = document.getElementById('csvFile');
+        const fileStatus = document.getElementById('file-status');
+        const detectedHeadersDiv = document.getElementById('detected-headers');
+        const encodingSelect = document.getElementById('encoding');
+        const resultsCountSpan = document.getElementById('results-count');
+        const zoneItemsCountSpan = document.getElementById('zone-items-count');
+        const zoneCounterWrapper = document.getElementById('zone-counter-wrapper');
+        const printButton = document.getElementById('print-button');
+
+        // Configura a lógica de mapeamento de zonas e categorias
+        function setupZoneLogic() {
+            activitiesInZone = {};
+            for (const zone in zoneToCategoryMapping) {
+                activitiesInZone[zone.toUpperCase()] = zoneToCategoryMapping[zone];
+            }
+            
+            categoryToZoneMapping = {};
+            for (const zone in activitiesInZone) {
+                const categories = activitiesInZone[zone];
+                categories.forEach(category => {
+                    if (!categoryToZoneMapping[category]) {
+                        categoryToZoneMapping[category] = [];
+                    }
+                    categoryToZoneMapping[category].push(zone);
+                });
+            }
+        }
+
+        // Preenche o seletor de filtro de zona
+        function populateZoneFilter() {
+            const zones = Object.keys(activitiesInZone).sort();
+            zoneSearchSelect.innerHTML = '<option value="">Todas as Zonas</option>';
+            zones.forEach(zone => {
+                const option = document.createElement('option');
+                option.value = zone;
+                option.textContent = `${zone} - ${zoneDescriptions[zone] || 'Descrição não disponível'}`;
+                zoneSearchSelect.appendChild(option);
+            });
+        }
+        
+        // Função auxiliar para obter valor de um item, tentando várias chaves possíveis
+        function getValueFromItem(item, possibleKeys) {
+            for (const key of possibleKeys) {
+                if (item && item[key] !== undefined && item[key] !== null) {
+                    return item[key];
+                }
+            }
+            return '';
+        }
+
+        // Renderiza a tabela de resultados
+        function renderTable(data, totalRecords) {
+            resultsTable.innerHTML = '';
+            const resultsLength = data.length;
+            
+            if (cnaeData.length > 0) {
+                 resultsCountSpan.textContent = `Exibindo ${resultsLength} de ${totalRecords} registros`;
+                 zoneCounterWrapper.classList.remove('hidden');
+                 zoneItemsCountSpan.innerHTML = `<strong class="text-lg font-bold text-indigo-600">${resultsLength}</strong><span class="text-xs block text-gray-500">encontrados</span>`;
+            } else {
+                 resultsCountSpan.textContent = '';
+                 zoneCounterWrapper.classList.add('hidden');
+            }
+
+            if (resultsLength === 0) {
+                const selectedZone = zoneSearchSelect.value;
+                const allowedCategories = activitiesInZone[selectedZone] || [];
+                const isOnlyIIB1 = allowedCategories.length === 1 && allowedCategories[0] === 'II.B.1';
+                
+                noResults.classList.remove('hidden');
+
+                if (inscricaoSearchInput.value.trim() && !inscricaoZoneMap.has(inscricaoSearchInput.value.trim())) {
+                    noResults.innerHTML = '<p>Verifique a inscrição digitada.</p>';
+                } else if (selectedZone && isOnlyIIB1 && searchInput.value.trim().length === 0 && searchTags.length === 0) {
+                     noResults.innerHTML = `<div class="bg-blue-50 border border-blue-200 text-blue-800 text-sm rounded-lg p-4" role="alert"><p class="font-bold">Informação da Zona</p><p>Para esta zona são permitidas apenas atividades de profissionais liberais, técnicos ou universitários e outras atividades não incômodas exercidas na própria residência (não possuindo funcionários e atendimento ao público).</p></div>`;
+                } else if (cnaeData.length > 0) {
+                    noResults.innerHTML = '<p>Nenhum resultado encontrado para a sua busca.</p>';
+                } else {
+                    noResults.innerHTML = '<p>Nenhum dado para exibir. Carregue um ficheiro CSV para começar.</p>';
+                }
+                return;
+            }
+            
+            noResults.classList.add('hidden');
+            
+            data.forEach(item => {
+                const row = document.createElement('tr');
+                const cnae = getValueFromItem(item, ['cnae', 'CNAE']);
+                const descricao = getValueFromItem(item, ['descricao', 'Descricao', 'DESCRIÇÃO', 'Descrição']);
+                const categoriaCompleta = getValueFromItem(item, ['categoria', 'Categoria', 'CATEGORIA', 'Categoría']);
+                const justificativa = getValueFromItem(item, ['justificativa', 'Justificativa', 'Justificativa com Base Lei 4186.2007']);
+                const categoriaMatch = categoriaCompleta.match(/^[A-Z]+\.[A-Z](\.\d)?/);
+                const categoriaCode = categoriaMatch ? categoriaMatch[0] : null;
+                let zonasHtml;
+
+                if (item.isCompatible === false) {
+                    row.className = 'bg-red-50 text-red-800';
+                    zonasHtml = `<span class="px-2.5 py-0.5 font-bold">INCOMPATÍVEL</span>`;
+                } else {
+                    row.className = 'hover:bg-gray-50 transition duration-150 ease-in-out';
+                    const zonas = categoryToZoneMapping[categoriaCode] || ['Verificar legislação específica'];
+                    zonasHtml = `<div class="flex flex-wrap gap-1">${zonas.map(z => `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${z}</span>`).join('')}</div>`;
+                }
+
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">${cnae}</td>
+                    <td class="px-6 py-4 whitespace-normal text-sm">${descricao}</td>
+                    <td class="px-6 py-4 whitespace-normal text-sm">${categoriaCompleta}</td>
+                    <td class="px-6 py-4 whitespace-normal text-sm">${justificativa}</td>
+                    <td class="px-6 py-4 whitespace-normal text-sm">${zonasHtml}</td>
+                `;
+                resultsTable.appendChild(row);
+            });
+        }
+
+        // Renderiza as tags de pesquisa
+        function renderTags() {
+            const existingTags = tagContainer.querySelectorAll('.cnae-tag');
+            existingTags.forEach(tag => tag.remove());
+            searchTags.forEach(tagText => {
+                const tagElement = document.createElement('span');
+                tagElement.className = 'cnae-tag';
+                tagElement.textContent = tagText;
+                const closeButton = document.createElement('span');
+                closeButton.className = 'cnae-tag-close';
+                closeButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>`;
+                closeButton.onclick = () => {
+                    searchTags = searchTags.filter(t => t !== tagText);
+                    renderTags();
+                    masterFilter();
+                };
+                tagElement.appendChild(closeButton);
+                tagContainer.insertBefore(tagElement, searchInput);
+            });
+        }
+
+        // Função principal de filtragem que combina todos os critérios
+        function masterFilter() {
+            const textQuery = searchInput.value.toLowerCase().trim();
+            const zoneQuery = zoneSearchSelect.value;
+            const inscricaoQuery = inscricaoSearchInput.value.trim();
+            
+            let baseData = cnaeData;
+            let filteredData = [];
+
+            let activeAllowedCategories = null;
+            let isZoneFilterActive = false;
+
+            zoneCompositionFeedback.innerHTML = '';
+
+            // Lógica de filtro por Inscrição (tem prioridade)
+            if (inscricaoQuery) {
+                zoneSearchSelect.value = '';
+                zoneSearchSelect.disabled = true;
+                const zonesForInscricao = inscricaoZoneMap.get(inscricaoQuery);
+                if (zonesForInscricao && zonesForInscricao.size > 0) {
+                    isZoneFilterActive = true;
+                    const descriptiveNames = Array.from(zonesForInscricao).map(zone => `${zone.toUpperCase()} - ${zoneDescriptions[zone.toUpperCase()] || 'Descrição não disponível'}`).join(', ');
+                    inscricaoFeedback.textContent = `Zona/Corredor: ${descriptiveNames}`;
+                    inscricaoFeedback.className = 'text-xs mt-1 h-4 text-blue-600 font-semibold';
+                    activeAllowedCategories = new Set();
+                    zonesForInscricao.forEach(zone => {
+                        const categories = activitiesInZone[zone.toUpperCase()] || [];
+                        categories.forEach(cat => activeAllowedCategories.add(cat));
+                    });
+                } else {
+                    isZoneFilterActive = true;
+                    inscricaoFeedback.textContent = 'Inscrição não encontrada no ficheiro.';
+                    inscricaoFeedback.className = 'text-xs mt-1 h-4 text-red-600';
+                    activeAllowedCategories = new Set();
+                }
+            } else { // Lógica de filtro por Zona
+                zoneSearchSelect.disabled = false;
+                inscricaoFeedback.textContent = '';
+                if (zoneQuery) {
+                    isZoneFilterActive = true;
+                    const composition = activitiesInZone[zoneQuery];
+                    activeAllowedCategories = new Set(composition || []);
+                    if (zoneToCategoryMapping[zoneQuery]) {
+                        zoneCompositionFeedback.innerHTML = `<span class="font-semibold">Composto por:</span> ${composition.join(', ')}`;
+                    }
+                }
+            }
+            
+            // Filtra por tags se existirem
+            if (searchTags.length > 0) {
+                filteredData = searchTags.map(tag => {
+                    const item = cnaeData.find(d => getValueFromItem(d, ['cnae', 'CNAE']) === tag);
+                    if (!item) return { cnae: tag, descricao: 'CNAE não encontrado na base de dados', isCompatible: false };
+
+                    if (isZoneFilterActive) {
+                        const categoriaCompleta = getValueFromItem(item, ['categoria', 'Categoria', 'CATEGORIA', 'Categoría']);
+                        const categoriaMatch = categoriaCompleta.match(/^[A-Z]+\.[A-Z](\.\d)?/);
+                        const categoriaCode = categoriaMatch ? categoriaMatch[0] : null;
+                        const isCompatible = activeAllowedCategories.has(categoriaCode);
+                        return { ...item, isCompatible };
+                    }
+                    return { ...item, isCompatible: true };
+                }).filter(Boolean);
+            
+            } else { // Filtra pelo texto de pesquisa e zona ativa
+                baseData = cnaeData;
+                if (isZoneFilterActive) {
+                     baseData = baseData.filter(item => {
+                        const categoriaCompleta = getValueFromItem(item, ['categoria', 'Categoria', 'CATEGORIA', 'Categoría']);
+                        const categoriaMatch = categoriaCompleta.match(/^[A-Z]+\.[A-Z](\.\d)?/);
+                        const categoriaCode = categoriaMatch ? categoriaMatch[0] : null;
+                        return activeAllowedCategories.has(categoriaCode);
+                    });
+                }
+                 if (textQuery) {
+                    baseData = baseData.filter(item => {
+                        const cnae = getValueFromItem(item, ['cnae', 'CNAE']).toString();
+                        const desc = getValueFromItem(item, ['descricao', 'Descricao', 'DESCRIÇÃO', 'Descrição']).toLowerCase();
+                        const just = getValueFromItem(item, ['justificativa', 'Justificativa', 'Justificativa com Base Lei 4186.2007']).toLowerCase();
+                        return cnae.startsWith(textQuery) || desc.includes(textQuery) || just.includes(textQuery);
+                    });
+                }
+                filteredData = baseData;
+            }
+
+            renderTable(filteredData, cnaeData.length);
+        }
+
+        // Processa os dados do CSV e armazena-os
+        function processAndSetData(data) {
+            cnaeData = [];
+            inscricaoZoneMap.clear();
+            const uniqueCnaes = new Map();
+            data.forEach(row => {
+                const inscricao = getValueFromItem(row, ['inscricao', 'Inscrição', 'INSCRICAO']);
+                const zona = getValueFromItem(row, ['zona_corredor', 'ZONA_CORREDOR', 'zona']);
+                if (inscricao && zona) {
+                    if (!inscricaoZoneMap.has(inscricao)) {
+                        inscricaoZoneMap.set(inscricao, new Set());
+                    }
+                    inscricaoZoneMap.get(inscricao).add(zona);
+                }
+
+                const cnae = getValueFromItem(row, ['cnae', 'CNAE']);
+                if (cnae && !uniqueCnaes.has(cnae)) {
+                   uniqueCnaes.set(cnae, row);
+                }
+            });
+
+            cnaeData = Array.from(uniqueCnaes.values());
+            // CORREÇÃO LÓGICA: Chama masterFilter() para renderizar a tabela com todos os dados carregados
+            masterFilter();
+        }
+
+        // Lida com o carregamento do ficheiro CSV
+        function handleFileLoad(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            fileStatus.textContent = `Processando ficheiro: ${file.name}...`;
+            Papa.parse(file, {
+                header: true, 
+                skipEmptyLines: true,
+                encoding: encodingSelect.value,
+                delimitersToGuess: [',', ';', '\t'],
+                complete: function(results) {
+                    if (results.errors.length > 0) {
+                        fileStatus.textContent = 'Erro ao processar o ficheiro. Verifique o CSV e a codificação.';
+                        console.error("Erros de análise CSV:", results.errors);
+                        return;
+                    }
+                    fileStatus.textContent = `Ficheiro "${file.name}" carregado com sucesso.`;
+                    detectedHeadersDiv.innerHTML = `<strong>Colunas detetadas:</strong> ${results.meta.fields.join(', ')}`;
+                    processAndSetData(results.data);
+                    [searchInput, zoneSearchSelect, inscricaoSearchInput, printButton].forEach(input => {
+                        if (input) input.disabled = false;
+                    });
+                },
+                error: function(error) {
+                    fileStatus.textContent = `Erro ao carregar o ficheiro: ${error.message}`;
+                }
+            });
+        }
+        
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            setupZoneLogic();
+            populateZoneFilter();
+            
+            inscricaoSearchInput.addEventListener('keyup', masterFilter);
+            
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { 
+                    e.preventDefault();
+                    const tagText = searchInput.value.trim();
+                    if (tagText && !searchTags.includes(tagText)) {
+                        searchTags.push(tagText);
+                        renderTags();
+                    }
+                    searchInput.value = '';
+                    masterFilter();
+                } else if (e.key === 'Backspace' && searchInput.value === '') {
+                    searchTags.pop();
+                    renderTags();
+                    masterFilter();
+                }
+            });
+            searchInput.addEventListener('keyup', (e) => {
+                if(e.key !== 'Enter' && e.key !== ' ') masterFilter();
+            });
+
+            zoneSearchSelect.addEventListener('change', masterFilter);
+
+            csvFileInput.addEventListener('change', handleFileLoad);
+            encodingSelect.addEventListener('change', () => {
+                if (csvFileInput.files[0]) {
+                   csvFileInput.dispatchEvent(new Event('change'));
+                }
+            });
+            
+            printButton.addEventListener('click', () => {
+                const printSummary = document.getElementById('print-summary');
+                const inscricaoValue = inscricaoSearchInput.value.trim();
+                const zonaValue = zoneSearchSelect.value;
+                
+                let summaryHtml = `
+                    <h2 style="font-size: 1.5rem; font-weight: bold; margin-bottom: 0.25rem;">Relatório de Consulta de CNAE</h2>
+                    <p style="font-size: 0.9rem; margin-bottom: 1rem; color: #555;">Baseado no Anexo II da Lei de Zoneamento de Valinhos (Lei 4186/2007)</p>
+                    <p style="margin-bottom: 1rem;"><strong>Data de Emissão:</strong> ${new Date().toLocaleString('pt-BR')}</p>
+                    <h3 style="font-size: 1.2rem; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 0.5rem; margin-bottom: 1rem;">Filtros Aplicados</h3>
+                `;
+
+                if (inscricaoValue) {
+                    summaryHtml += `<p><strong>Inscrição Consultada:</strong> ${inscricaoValue}</p>`;
+                    const feedbackText = inscricaoFeedback.textContent;
+                    if (feedbackText && feedbackText !== 'Inscrição não encontrada no ficheiro.') {
+                         summaryHtml += `<p><strong>${feedbackText}</strong></p>`;
+                    }
+                } else if (zonaValue) {
+                    const desc = zoneDescriptions[zonaValue] || zonaValue;
+                    summaryHtml += `<p><strong>Zona Consultada:</strong> ${zonaValue} - ${desc}</p>`;
+                }
+
+                if (searchTags.length > 0) {
+                     summaryHtml += `<p style="margin-top: 0.5rem;"><strong>CNAEs Consultados:</strong> ${searchTags.join(', ')}</p>`;
+                } else if (searchInput.value.trim()) {
+                     summaryHtml += `<p style="margin-top: 0.5rem;"><strong>Termo de Busca:</strong> ${searchInput.value.trim()}</p>`;
+                }
+
+                printSummary.innerHTML = summaryHtml;
+                window.print();
+            });
+        });
+
+    </script>
+</body>
+</html>
