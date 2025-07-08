@@ -6,7 +6,6 @@
     <title>Classificador de CNAE - Zoneamento de Valinhos</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- PapaParse para análise de CSV -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
     <style>
         body {
@@ -101,40 +100,11 @@
         </header>
 
         <main>
-            <!-- Secção de Carregamento de Ficheiro -->
-            <div class="mb-6 p-4 rounded-lg border border-indigo-200 bg-indigo-50 shadow-sm no-print">
-                <h2 class="text-lg font-semibold text-indigo-800 mb-2">Carregar a sua Planilha</h2>
-                                
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                    <div class="md:col-span-2">
-                        <label for="csvFile" class="block text-xs font-medium text-gray-700 mb-1">Ficheiro CSV (com CNAEs e Inscrições):</label>
-                        <input type="file" id="csvFile" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-100 file:text-indigo-700 hover:file:bg-indigo-200 cursor-pointer"/>
-                    </div>
-                    <div>
-                        <label for="encoding" class="block text-xs font-medium text-gray-700 mb-1">Codificação:</label>
-                        <select id="encoding" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
-                            <option value="UTF-8">UTF-8 (Padrão)</option>
-                            <option value="ISO-8859-1">ISO-8859-1 (Latin1)</option>
-                            <option value="windows-1252">Windows-1252</option>
-                        </select>
-                    </div>
-                </div>
-                 <p class="text-xs text-indigo-700 mt-2">Dica: Se vir caracteres estranhos (ex:  ), tente a opção `ISO-8859-1 (Latin1)`.</p>
-
-                <div id="file-feedback" class="mt-3">
-                    <p id="file-status" class="text-xs text-indigo-600">Nenhum ficheiro carregado. A busca está desativada.</p>
-                    <div id="detected-headers" class="text-xs text-gray-500 mt-1"></div>
-                </div>
-            </div>
-
             <div id="printable-area">
-                <!-- Secção de Resumo para Impressão (oculta no ecrã) -->
                 <div id="print-summary" class="hidden"></div>
 
-                <!-- Secção de Pesquisa -->
                 <div class="p-4 rounded-lg border border-gray-200 shadow-sm sticky top-4 bg-gray-50/80 backdrop-blur-sm z-10 mb-6 no-print">
                      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
-                        <!-- Pesquisa por Inscrição -->
                         <div class="md:col-span-2">
                             <label for="inscricao-search" class="block text-sm font-medium text-gray-700 mb-2">1. Buscar por Inscrição (Prioridade)</label>
                             <div class="relative">
@@ -146,7 +116,6 @@
                              <p id="inscricao-feedback" class="text-xs mt-1 h-4"></p>
                         </div>
 
-                        <!-- Pesquisa por Zona -->
                         <div>
                             <label for="zone-search" class="block text-sm font-medium text-gray-700 mb-2">2. Ou Buscar por Zona</label>
                             <div class="flex items-center space-x-3">
@@ -160,8 +129,7 @@
                             <p id="zone-composition-feedback" class="text-xs text-gray-600 mt-1 h-auto"></p>
                         </div>
 
-                         <!-- Pesquisa por Texto / Tags -->
-                        <div>
+                         <div>
                             <label for="search" class="block text-sm font-medium text-gray-700 mb-2">3. Refinar por CNAE ou palavra-chave</label>
                             <div id="tag-container" class="w-full flex items-center flex-wrap px-2 border border-gray-300 rounded-md shadow-sm bg-white focus-within:ring-1 focus-within:ring-indigo-500 focus-within:border-indigo-500">
                                  <input type="text" id="search" placeholder="Digite CNAEs ou palavras..." class="flex-grow py-3 search-input" disabled>
@@ -170,7 +138,6 @@
                     </div>
                 </div>
 
-                <!-- Cabeçalho dos Resultados -->
                 <div class="flex justify-between items-baseline mb-3 px-1">
                     <h3 class="text-lg font-semibold text-gray-800">Resultados da Classificação</h3>
                     <div class="flex items-center space-x-4">
@@ -179,7 +146,6 @@
                     </div>
                 </div>
 
-                <!-- Tabela de Resultados -->
                 <div class="bg-white shadow-md rounded-lg overflow-hidden">
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
@@ -193,12 +159,11 @@
                                 </tr>
                             </thead>
                             <tbody id="results-table" class="bg-white divide-y divide-gray-200">
-                               <!-- As linhas serão inseridas aqui pelo JavaScript -->
-                            </tbody>
+                               </tbody>
                         </table>
                     </div>
                      <div id="no-results" class="text-center p-8 text-gray-500">
-                        <p>Nenhum dado para exibir. Carregue um ficheiro CSV para começar.</p>
+                        <p>Carregando base de dados. Por favor, aguarde...</p>
                     </div>
                 </div>
             </div>
@@ -236,10 +201,6 @@
         const inscricaoFeedback = document.getElementById('inscricao-feedback');
         const resultsTable = document.getElementById('results-table');
         const noResults = document.getElementById('no-results');
-        const csvFileInput = document.getElementById('csvFile');
-        const fileStatus = document.getElementById('file-status');
-        const detectedHeadersDiv = document.getElementById('detected-headers');
-        const encodingSelect = document.getElementById('encoding');
         const resultsCountSpan = document.getElementById('results-count');
         const zoneItemsCountSpan = document.getElementById('zone-items-count');
         const zoneCounterWrapper = document.getElementById('zone-counter-wrapper');
@@ -314,7 +275,10 @@
                 } else if (cnaeData.length > 0) {
                     noResults.innerHTML = '<p>Nenhum resultado encontrado para a sua busca.</p>';
                 } else {
-                    noResults.innerHTML = '<p>Nenhum dado para exibir. Carregue um ficheiro CSV para começar.</p>';
+                    // Mantem a mensagem de carregamento inicial até que os dados sejam processados
+                    if (!cnaeData.length) {
+                        noResults.innerHTML = '<p>Processando dados... Isso pode levar um momento.</p>';
+                    }
                 }
                 return;
             }
@@ -475,7 +439,6 @@
                     inscricaoZoneMap.get(inscricao).add(zona);
                 }
 
-                // CORREÇÃO: A variável 'item' foi trocada por 'row'
                 const cnae = getValueFromItem(row, ['cnae', 'CNAE']);
                 if (cnae && !uniqueCnaes.has(cnae)) {
                    uniqueCnaes.set(cnae, row);
@@ -483,35 +446,36 @@
             });
 
             cnaeData = Array.from(uniqueCnaes.values());
-            renderTable([], cnaeData.length);
+            masterFilter(); // Chama o filtro mestre para exibir os dados iniciais
         }
 
-        // Lida com o carregamento do ficheiro CSV
-        function handleFileLoad(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            fileStatus.textContent = `Processando ficheiro: ${file.name}...`;
-            Papa.parse(file, {
-                header: true, 
+        // ***** NOVO: Função para carregar CSV de uma URL *****
+        function loadCsvFromUrl(url) {
+            const statusDiv = noResults.querySelector('p');
+            statusDiv.textContent = 'Carregando base de dados do repositório...';
+            
+            Papa.parse(url, {
+                download: true,
+                header: true,
                 skipEmptyLines: true,
-                encoding: encodingSelect.value,
-                delimitersToGuess: [',', ';', '\t'],
+                encoding: "UTF-8",
                 complete: function(results) {
                     if (results.errors.length > 0) {
-                        fileStatus.textContent = 'Erro ao processar o ficheiro. Verifique o CSV e a codificação.';
+                        statusDiv.textContent = 'Erro ao carregar a base de dados. Verifique o link do CSV.';
                         console.error("Erros de análise CSV:", results.errors);
                         return;
                     }
-                    fileStatus.textContent = `Ficheiro "${file.name}" carregado com sucesso.`;
-                    detectedHeadersDiv.innerHTML = `<strong>Colunas detetadas:</strong> ${results.meta.fields.join(', ')}`;
+                    statusDiv.textContent = 'Nenhum resultado para exibir. Refine sua busca.';
+                    
                     processAndSetData(results.data);
+                    
+                    // Habilita os campos de busca
                     [searchInput, zoneSearchSelect, inscricaoSearchInput, printButton].forEach(input => {
                         if (input) input.disabled = false;
                     });
                 },
                 error: function(error) {
-                    fileStatus.textContent = `Erro ao carregar o ficheiro: ${error.message}`;
+                    statusDiv.textContent = `Erro fatal ao carregar o ficheiro: ${error.message}`;
                 }
             });
         }
@@ -520,6 +484,10 @@
         document.addEventListener('DOMContentLoaded', () => {
             setupZoneLogic();
             populateZoneFilter();
+
+            // ***** ALTERADO: URL do seu arquivo CSV no formato RAW *****
+            const csvUrl = 'https://raw.githubusercontent.com/Hadler-Stevanatto/Classificador_CNAE/61fbb639da0399212ac3223668d2e1ed058c084c/CLASSIFICADOR%20DE%20CNAE%20_%204186.2007.csv';
+            loadCsvFromUrl(csvUrl); // Chama a nova função para carregar os dados
             
             inscricaoSearchInput.addEventListener('keyup', masterFilter);
             
@@ -544,13 +512,6 @@
             });
 
             zoneSearchSelect.addEventListener('change', masterFilter);
-
-            csvFileInput.addEventListener('change', handleFileLoad);
-            encodingSelect.addEventListener('change', () => {
-                if (csvFileInput.files[0]) {
-                   csvFileInput.dispatchEvent(new Event('change'));
-                }
-            });
             
             printButton.addEventListener('click', () => {
                 const printSummary = document.getElementById('print-summary');
